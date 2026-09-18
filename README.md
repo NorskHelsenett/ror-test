@@ -4,6 +4,9 @@ The E2E harness drives public HTTP endpoints, asserts expected behavior, and
 compares independently executed runs. It does not use the current ROR client
 library to interpret responses. Existing scratch programs are unchanged.
 
+Release pipeline implementation order and acceptance gates:
+[release execution plan](docs/release-pipeline-execution-plan.md).
+
 ## Prerequisites
 
 - Docker with Compose v2, running Linux containers.
