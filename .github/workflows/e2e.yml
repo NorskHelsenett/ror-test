@@ -64,6 +64,7 @@ jobs:
         working-directory: ror-test
         run: |
           go test -race ./internal/e2e ./cmd/e2e
+          node --test .github/scripts/*.test.cjs
           bash testenv/snapshot-test.sh --restore
       - name: Run synthetic E2E
         env:
@@ -83,8 +84,10 @@ jobs:
           path: |
             ror-test/artifacts/*/candidate.json
             ror-test/artifacts/*/candidate.xml
+            ror-test/artifacts/*/candidate-verified.json
             ror-test/artifacts/*/baseline.json
             ror-test/artifacts/*/baseline.xml
+            ror-test/artifacts/*/baseline-verified.json
             ror-test/artifacts/*/diff.json
             ror-test/artifacts/*/exit-code.txt
             ror-test/artifacts/*/*-image.txt

@@ -1,0 +1,181 @@
+name: Test immutable candidate
+
+on:
+  workflow_call:
+    inputs:
+      artifact_id:
+        description: Immutable artifact ID from this caller workflow run; contains candidate.tar
+        required: true
+        type: string
+      archive_sha256:
+        description: Expected sha256 checksum of candidate.tar, including sha256 prefix
+        required: true
+        type: string
+      index_digest:
+        description: Expected OCI root index or image manifest digest
+        required: true
+        type: string
+      manifest_digest:
+        description: Expected manifest digest for the tested platform
+        required: true
+        type: string
+      platform:
+        description: linux/amd64 or linux/arm64 (native runner required)
+        required: true
+        type: string
+      harness_sha:
+        description: Full ror-test commit SHA; pin to the same revision as this reusable workflow
+        required: true
+        type: string
+      source_sha:
+        description: API build source SHA asserted by the trusted caller
+        required: true
+        type: string
+      baseline_image:
+        description: Optional already-published baseline by immutable digest
+        default: ""
+        type: string
+    secrets:
+      CROSS_REPO_READ_TOKEN:
+        description: Read-only access to private ror-test repository if needed
+        required: false
+    outputs:
+      evidence_artifact_id:
+        description: Artifact containing verified per-platform reports; only set on success
+        value: ${{ jobs.test.outputs.evidence_artifact_id }}
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+jobs:
+  test:
+    runs-on: ${{ inputs.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      GOWORK: 'off'
+      COMPOSE_PROGRESS: plain
+    outputs:
+      evidence_artifact_id: ${{ steps.evidence.outputs.artifact-id }}
+    steps:
+      - name: Validate immutable inputs
+        env:
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+          INDEX_DIGEST: ${{ inputs.index_digest }}
+          MANIFEST_DIGEST: ${{ inputs.manifest_digest }}
+          PLATFORM: ${{ inputs.platform }}
+          HARNESS_SHA: ${{ inputs.harness_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          BASELINE_IMAGE: ${{ inputs.baseline_image }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$HARNESS_SHA" =~ ^[0-9a-f]{40}$ && "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          for digest in "$ARCHIVE_SHA256" "$INDEX_DIGEST" "$MANIFEST_DIGEST"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          done
+          [[ "$PLATFORM" == linux/amd64 || "$PLATFORM" == linux/arm64 ]]
+          if [[ -n "$BASELINE_IMAGE" ]]; then
+            [[ "$BASELINE_IMAGE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[0-9a-f]{64}$ ]]
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: NorskHelsenett/ror-test
+          ref: ${{ inputs.harness_sha }}
+          path: ror-test
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Confirm native architecture and harness identity
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          HARNESS_SHA: ${{ inputs.harness_sha }}
+        run: |
+          [[ "$(git -C ror-test rev-parse HEAD)" == "$HARNESS_SHA" ]]
+          case "$(uname -m)" in
+            x86_64) actual=linux/amd64 ;;
+            aarch64|arm64) actual=linux/arm64 ;;
+            *) exit 1 ;;
+          esac
+          [[ "$actual" == "$PLATFORM" ]]
+      - uses: actions/download-artifact@v5
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: candidate-input
+          merge-multiple: true
+      - name: Require regular archive
+        run: test -f candidate-input/candidate.tar && test ! -L candidate-input/candidate.tar
+      - uses: docker/setup-docker-action@v4
+        with:
+          daemon-config: |
+            { "features": { "containerd-snapshotter": true } }
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ror-test/go.mod
+          cache-dependency-path: ror-test/go.sum
+      - name: Run verifier tests
+        working-directory: ror-test
+        env:
+          GOWORK: "off"
+        run: |
+          go test -mod=readonly -race ./internal/e2e ./cmd/e2e
+          node --test .github/scripts/*.test.cjs
+      - name: Authenticate for baseline reads
+        if: inputs.baseline_image != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Test candidate without API source checkout or rebuild
+        env:
+          E2E_CANDIDATE_SHA256: ${{ inputs.archive_sha256 }}
+          E2E_CANDIDATE_DIGEST: ${{ inputs.index_digest }}
+          E2E_CANDIDATE_PLATFORM: ${{ inputs.platform }}
+          BASELINE_IMAGE: ${{ inputs.baseline_image }}
+        run: |
+          export E2E_CANDIDATE_ARCHIVE="$GITHUB_WORKSPACE/candidate-input/candidate.tar"
+          if [[ -n "$BASELINE_IMAGE" ]]; then
+            bash ror-test/testenv/run.sh compare "$BASELINE_IMAGE"
+          else
+            bash ror-test/testenv/run.sh run
+          fi
+      - name: Validate and bind success evidence
+        env:
+          EXPECTED_ARCHIVE: ${{ inputs.archive_sha256 }}
+          EXPECTED_INDEX: ${{ inputs.index_digest }}
+          EXPECTED_MANIFEST: ${{ inputs.manifest_digest }}
+          EXPECTED_PLATFORM: ${{ inputs.platform }}
+          EXPECTED_HARNESS: ${{ inputs.harness_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          INPUT_ARTIFACT_ID: ${{ inputs.artifact_id }}
+          BASELINE_IMAGE: ${{ inputs.baseline_image }}
+        run: node ror-test/.github/scripts/verify-candidate-evidence.cjs ror-test
+      - name: Upload verified evidence
+        id: evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-evidence-${{ inputs.platform == 'linux/arm64' && 'arm64' || 'amd64' }}-${{ inputs.artifact_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ror-test/artifacts/*/candidate*.json
+            ror-test/artifacts/*/candidate.xml
+            ror-test/artifacts/*/baseline*.json
+            ror-test/artifacts/*/baseline.xml
+            ror-test/artifacts/*/diff.json
+            ror-test/artifacts/*/release-evidence.json
+            ror-test/artifacts/*/exit-code.txt
+            ror-test/artifacts/*/harness-*.txt
+            ror-test/artifacts/*/fixtures.sha256
+      - name: Upload diagnostic reports on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-diagnostics-${{ inputs.platform == 'linux/arm64' && 'arm64' || 'amd64' }}-${{ inputs.artifact_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          path: |
+            ror-test/artifacts/*/candidate.json
+            ror-test/artifacts/*/candidate.xml
+            ror-test/artifacts/*/exit-code.txt

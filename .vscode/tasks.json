@@ -57,6 +57,16 @@
 			"command": "docker run --rm --network none -v \"${workspaceFolder}:/repo:ro\" -w /repo rhysd/actionlint:1.7.7 .github/workflows/e2e.yml",
 			"problemMatcher": [],
 			"group": "test"
+		},
+		{
+			"label": "e2e: prebuilt candidate verification",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/testenv/candidate-test.sh"
+			],
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }

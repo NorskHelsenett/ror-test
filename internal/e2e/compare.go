@@ -34,6 +34,23 @@ type Difference struct {
 	Reason string `json:"reason"`
 }
 
+func VerifyReport(suite Suite, report Report) error {
+	if err := suite.Validate(); err != nil {
+		return err
+	}
+	if report.Schema != 1 || report.Suite != fingerprint(suite) || report.Expected != len(suite.Steps) || !report.Passed(len(suite.Steps)) {
+		return fmt.Errorf("report is incomplete, failed, or belongs to a different suite")
+	}
+	for index, step := range suite.Steps {
+		result := report.Results[index]
+		digest, err := hex.DecodeString(result.Digest)
+		if result.Name != step.Name || result.Status != step.Status || err != nil || len(digest) != sha256.Size {
+			return fmt.Errorf("report result does not match suite step %q", step.Name)
+		}
+	}
+	return nil
+}
+
 func Compare(baseline, candidate Report) []Difference {
 	var differences []Difference
 	if baseline.Schema != 1 || candidate.Schema != 1 || baseline.Suite != candidate.Suite {

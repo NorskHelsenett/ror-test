@@ -75,6 +75,7 @@ services:
       oidc: {condition: service_started}
   api:
     image: ${E2E_API_IMAGE:?set E2E_API_IMAGE}
+    platform: ${E2E_CANDIDATE_PLATFORM:-linux/amd64}
     environment:
       DEVELOPMENT: "false"
       ENVIRONMENT: e2e

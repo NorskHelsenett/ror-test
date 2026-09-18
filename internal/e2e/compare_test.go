@@ -2,6 +2,35 @@ package e2e
 
 import "testing"
 
+func TestVerifyReport(t *testing.T) {
+	suite := Suite{Version: 1, Name: "gate", Steps: []Step{{Name: "denied", Method: "HEAD", Path: "/", Status: 403}}}
+	valid := func() Report {
+		return Report{Schema: 1, Suite: fingerprint(suite), Expected: 1, Results: []Result{{Name: "denied", Status: 403, Digest: fingerprint("body")}}}
+	}
+	if err := VerifyReport(suite, valid()); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*Report){
+		"empty":     func(report *Report) { report.Results = nil },
+		"suite":     func(report *Report) { report.Suite = "other" },
+		"schema":    func(report *Report) { report.Schema = 2 },
+		"count":     func(report *Report) { report.Expected = 2 },
+		"status":    func(report *Report) { report.Results[0].Status = 200 },
+		"name":      func(report *Report) { report.Results[0].Name = "other" },
+		"digest":    func(report *Report) { report.Results[0].Digest = "" },
+		"failure":   func(report *Report) { report.Results[0].Failures = []string{"failed"} },
+		"duplicate": func(report *Report) { report.Results = append(report.Results, report.Results[0]) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			report := valid()
+			change(&report)
+			if VerifyReport(suite, report) == nil {
+				t.Fatal("invalid release evidence accepted")
+			}
+		})
+	}
+}
+
 func TestCompare(t *testing.T) {
 	good := Report{Schema: 1, Suite: "fixture-v1", Expected: 1, Results: []Result{{Name: "denied", Status: 403, Digest: "same"}}}
 	if differences := Compare(good, good); len(differences) != 0 {

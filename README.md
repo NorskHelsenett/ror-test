@@ -7,6 +7,10 @@ library to interpret responses. Existing scratch programs are unchanged.
 Release pipeline implementation order and acceptance gates:
 [release execution plan](docs/release-pipeline-execution-plan.md).
 
+Prebuilt OCI candidate testing and reusable workflow inputs:
+[candidate testing](docs/prebuilt-candidate-testing.md). This tests private build
+artifacts before RC publication; it does not implement publication or deployment.
+
 ## Prerequisites
 
 - Docker with Compose v2, running Linux containers.

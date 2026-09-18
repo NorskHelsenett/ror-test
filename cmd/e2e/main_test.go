@@ -1,13 +1,51 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/NorskHelsenett/ror-test/internal/e2e"
 )
+
+func TestVerifyReportCommand(t *testing.T) {
+	directory := t.TempDir()
+	suite := e2e.Suite{Version: 1, Name: "test", Steps: []e2e.Step{{Name: "denied", Method: "GET", Path: "/", Status: 403}}}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) { writer.WriteHeader(403) }))
+	defer server.Close()
+	report, err := e2e.Run(context.Background(), suite, server.URL, "candidate", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	suitePath, reportPath, output := filepath.Join(directory, "suite.json"), filepath.Join(directory, "report.json"), filepath.Join(directory, "verified.json")
+	if err := writeJSON(suitePath, suite); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSON(reportPath, report); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"-suite", suitePath, "-report", reportPath, "-out", output}
+	if err := verifyReport(args); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(output); err != nil {
+		t.Fatal(err)
+	}
+	report.Results[0].Status = 200
+	if err := writeJSON(reportPath, report); err != nil {
+		t.Fatal(err)
+	}
+	if verifyReport(args) == nil {
+		t.Fatal("incorrect status accepted")
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatal("failed verification emitted success evidence")
+	}
+}
 
 func TestCompareSameFile(t *testing.T) {
 	directory := t.TempDir()

@@ -23,7 +23,7 @@ func main() { os.Exit(execute()) }
 
 func execute() int {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: e2e run|compare [flags]")
+		fmt.Fprintln(os.Stderr, "usage: e2e run|compare|inspect-candidate|verify-report [flags]")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -34,6 +34,10 @@ func execute() int {
 		err = run(ctx, os.Args[2:])
 	case "compare":
 		err = compare(os.Args[2:])
+	case "inspect-candidate":
+		err = inspectCandidate(os.Args[2:])
+	case "verify-report":
+		err = verifyReport(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command")
 	}

@@ -7,4 +7,6 @@
 *.archive.gz
 *.bson
 *.bson.gz
+*.tar
+*.oci
 .DS_Store

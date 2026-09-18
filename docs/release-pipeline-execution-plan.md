@@ -1,6 +1,11 @@
 # Release pipeline execution plan
 
-Status: implementation plan, not implemented.
+Status: partially implemented in ror-test; release publication is not implemented.
+Implementation update: the ror-test archive verifier, prebuilt runner mode, strict
+report gate and reusable candidate workflow are now implemented locally; see
+[candidate testing](prebuilt-candidate-testing.md). Real cross-repository workflow
+execution and native amd64 verification are still pending. Steps 3-8 in ror-api
+and GitHub-side release/approval settings remain unimplemented.
 
 ## Agreed behavior
 
