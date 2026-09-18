@@ -1,0 +1,12 @@
+{
+  "interactiveLogin": false,
+  "tokenCallbacks": [{
+    "issuerId": "default",
+    "tokenExpiry": 3600,
+    "requestMappings": [
+      {"requestParam": "client_id", "match": "admin", "claims": {"sub": "admin", "aud": ["ror-e2e"], "email": "admin@e2e.invalid", "email_verified": true, "groups": ["admins"]}},
+      {"requestParam": "client_id", "match": "reader", "claims": {"sub": "reader", "aud": ["ror-e2e"], "email": "reader@e2e.invalid", "email_verified": true, "groups": ["readers"]}},
+      {"requestParam": "client_id", "match": "outsider", "claims": {"sub": "outsider", "aud": ["ror-e2e"], "email": "outsider@e2e.invalid", "email_verified": true, "groups": ["outsiders"]}}
+    ]
+  }]
+}

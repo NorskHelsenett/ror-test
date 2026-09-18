@@ -1,0 +1,79 @@
+name: Synthetic E2E
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      api_ref:
+        description: API commit or ref
+        default: main
+        type: string
+      shared_ref:
+        description: Shared library commit or ref
+        default: main
+        type: string
+      baseline_image:
+        description: Optional baseline API image (prefer an immutable digest)
+        type: string
+permissions:
+  contents: read
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ror-test
+      - uses: actions/checkout@v4
+        with:
+          repository: NorskHelsenett/ror
+          ref: ${{ inputs.shared_ref || 'main' }}
+          path: ror
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: NorskHelsenett/ror-api
+          ref: ${{ inputs.api_ref || 'main' }}
+          path: ror-api
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ror-test/go.mod
+          cache-dependency-path: |
+            ror-test/go.sum
+            ror/go.sum
+            ror-api/go.sum
+      - name: Create isolated candidate workspace
+        run: go work init ./ror ./ror-api ./ror-test
+      - name: Test harness
+        working-directory: ror-test
+        run: |
+          go test -race ./internal/e2e ./cmd/e2e
+          bash testenv/snapshot-test.sh --restore
+      - name: Run synthetic E2E
+        env:
+          BASELINE_IMAGE: ${{ inputs.baseline_image }}
+        run: |
+          if [[ -n "$BASELINE_IMAGE" ]]; then
+            bash ror-test/testenv/run.sh compare "$BASELINE_IMAGE"
+          else
+            bash ror-test/testenv/run.sh repeat
+          fi
+      - name: Upload contract reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-reports
+          retention-days: 7
+          path: |
+            ror-test/artifacts/*/candidate.json
+            ror-test/artifacts/*/candidate.xml
+            ror-test/artifacts/*/baseline.json
+            ror-test/artifacts/*/baseline.xml
+            ror-test/artifacts/*/diff.json
+            ror-test/artifacts/*/exit-code.txt
+            ror-test/artifacts/*/*-image.txt
+            ror-test/artifacts/*/fixtures.sha256
+            ror-test/artifacts/*/build.txt

@@ -1,0 +1,19 @@
+services:
+  restore:
+    image: mongo:8.0
+    entrypoint:
+      - mongorestore
+      - --uri=mongodb://test:synthetic-only@mongodb:27017/admin
+      - --archive=/snapshot/archive.gz
+      - --gzip
+      - --stopOnError
+      - --nsInclude=nhn-ror.resourcesv2
+      - --nsInclude=nhn-ror.acl
+      - --nsInclude=nhn-ror.projects
+      - --nsInclude=nhn-ror.workspaces
+      - --nsInclude=nhn-ror.datacenters
+    volumes:
+      - ${E2E_SNAPSHOT:?set E2E_SNAPSHOT}:/snapshot/archive.gz:ro
+    depends_on:
+      mongodb: {condition: service_healthy}
+    profiles: [snapshot]

@@ -1,0 +1,62 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "e2e: validate harness",
+			"type": "shell",
+			"command": "gofmt -w internal/e2e/*.go cmd/e2e/*.go && go test -race ./internal/e2e ./cmd/e2e && bash -n testenv/run.sh && bash testenv/snapshot-test.sh",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "e2e: synthetic stack",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/testenv/run.sh",
+				"run"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "e2e: inspect containers",
+			"type": "shell",
+			"command": "docker ps -a --filter name=e2e- --format '{{.Names}} {{.Status}}'",
+			"problemMatcher": []
+		},
+		{
+			"label": "e2e: repeat comparison",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/testenv/run.sh",
+				"repeat"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "e2e: snapshot verification",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/testenv/snapshot-test.sh",
+				"--e2e"
+			],
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "e2e: lint workflow",
+			"type": "shell",
+			"command": "docker run --rm --network none -v \"${workspaceFolder}:/repo:ro\" -w /repo rhysd/actionlint:1.7.7 .github/workflows/e2e.yml",
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

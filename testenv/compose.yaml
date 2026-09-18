@@ -1,0 +1,112 @@
+services:
+  mongodb:
+    image: mongo:8.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: test
+      MONGO_INITDB_ROOT_PASSWORD: synthetic-only
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - mongo-data:/data/db
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: synthetic-only
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 3s
+      timeout: 10s
+      retries: 60
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    command: [valkey-server, --requirepass, synthetic-only]
+    healthcheck:
+      test: [CMD, valkey-cli, -a, synthetic-only, ping]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  vault:
+    image: hashicorp/vault:1.18.3
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: synthetic-only
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://127.0.0.1:8200
+    cap_add: [IPC_LOCK]
+    healthcheck:
+      test: [CMD, vault, status]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  vault-init:
+    image: hashicorp/vault:1.18.3
+    entrypoint: [sh, /fixtures/vault.sh]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: synthetic-only
+    volumes:
+      - ./vault.sh:/fixtures/vault.sh:ro
+    depends_on:
+      vault: {condition: service_healthy}
+      mongodb: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      valkey: {condition: service_healthy}
+  seed:
+    image: mongo:8.0
+    entrypoint: [mongosh, "mongodb://test:synthetic-only@mongodb:27017/admin", --quiet, /fixtures/seed.js]
+    volumes:
+      - ./seed.js:/fixtures/seed.js:ro
+    depends_on:
+      mongodb: {condition: service_healthy}
+  oidc:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    environment:
+      SERVER_PORT: "8080"
+      JSON_CONFIG_PATH: /fixtures/oidc.json
+    volumes:
+      - ./oidc.json:/fixtures/oidc.json:ro
+  oidc-ready:
+    image: curlimages/curl:8.12.1
+    command: [--fail, --silent, --show-error, --retry, "60", --retry-delay, "1", --retry-connrefused, --max-time, "5", http://oidc:8080/default/.well-known/openid-configuration]
+    depends_on:
+      oidc: {condition: service_started}
+  api:
+    image: ${E2E_API_IMAGE:?set E2E_API_IMAGE}
+    environment:
+      DEVELOPMENT: "false"
+      ENVIRONMENT: e2e
+      ENABLE_TRACING: "false"
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: "8080"
+      HTTP_HEALTH_HOST: 0.0.0.0
+      HTTP_HEALTH_PORT: "9999"
+      VAULT_URL: http://vault:8200
+      VAULT_TOKEN: synthetic-only
+      MONGODB_HOST: mongodb
+      MONGODB_PORT: "27017"
+      MONGO_DATABASE: nhn-ror
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      KV_HOST: valkey
+      KV_PORT: "6379"
+      OIDC_PROVIDER: http://oidc:8080/default
+      OIDC_CLIENT_ID: ror-e2e
+      OIDC_SIGNER_ISSUER: http://api:8080
+    depends_on:
+      vault-init: {condition: service_completed_successfully}
+      seed: {condition: service_completed_successfully}
+      oidc-ready: {condition: service_completed_successfully}
+  runner:
+    image: ${E2E_RUNNER_IMAGE:?set E2E_RUNNER_IMAGE}
+    volumes:
+      - ./scenarios:/scenarios:ro
+      - ${E2E_ARTIFACTS:?set E2E_ARTIFACTS}:/artifacts
+    profiles: [runner]
+networks:
+  default:
+    internal: true
+volumes:
+  mongo-data:

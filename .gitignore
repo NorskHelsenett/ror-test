@@ -1,0 +1,10 @@
+/artifacts/
+/e2e
+/otlptest
+.env
+.env.*
+*.archive
+*.archive.gz
+*.bson
+*.bson.gz
+.DS_Store
