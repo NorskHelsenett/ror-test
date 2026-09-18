@@ -96,6 +96,26 @@ workspace, runs harness race tests, then repeats the synthetic suite or compares
 against the requested baseline image. API/shared refs are configurable; pin
 commits when reproducibility matters. No production credentials are required.
 
+`api_ref` and `shared_ref` accept branch names, tags, full commit SHAs, and
+unambiguous abbreviated SHAs. Before checkout, the workflow resolves each input
+through GitHub's commits API in its respective repository and logs the full SHA.
+The commit must already be pushed and accessible to the configured token. Ref
+resolution failures stop the workflow; they never fall back to `main`.
+
+If an older workflow attempts to fetch `refs/heads/f13b9a5*`, checkout has treated
+the abbreviated SHA as a branch/tag. Supply the full 40-character SHA for that
+repository, or dispatch a workflow revision containing the resolver. Re-running
+an old failed workflow does not pick up a newly changed workflow file.
+
+Resolver regression tests run before dependency checkout and can be run locally:
+
+```sh
+node --test .github/scripts/resolve-refs.test.cjs
+```
+
+These mock the GitHub API to test input forwarding, full-SHA validation, and
+failure handling; they do not verify remote commit existence or token permissions.
+
 The repository is [NorskHelsenett/ror-test](https://github.com/NorskHelsenett/ror-test).
 Private sibling repositories require a read-only
 `CROSS_REPO_READ_TOKEN`; private baseline images additionally require a registry
