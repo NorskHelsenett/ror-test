@@ -152,6 +152,36 @@ to discover, and no deployment or release is triggered by this path.
 8. Rehearse attempt 1 failure with no publication, attempt 2 from another commit for the same target, successful tests followed by RC publication, blocked final approval, approved promotion, and matching final digest. Use rehearsal repositories not watched by CD; never expose a deliberately failing candidate to real RC trackers.
 9. Enable production publication only after the gate-failure tests and reviewer configuration are verified. Do not create a real release as part of implementation without authorization.
 
+### README badges at cutover
+
+Update [ror-api/README.md](../../ror-api/README.md) as each workflow becomes
+available. Keep the existing Dependabot badge. The current test/build and release
+workflow badges can be displayed now; do not add links to nonexistent workflows.
+
+| Badge | Source and filter | Meaning and click destination |
+|---|---|---|
+| Test and build API | `testandbuild.yml`, `event=pull_request` | Latest matching PR workflow result; links to its workflow runs |
+| Integration (main) | Planned `integration.yml`, `branch=main&event=push` | Latest matching post-merge integration workflow result; links to that workflow |
+| RC publication | Planned `release-candidate.yml`, `branch=main&event=workflow_dispatch` | Full candidate workflow result, including all test gates and publication, not just build success; links to candidate runs and their reports |
+| Final release publication | `release.yml`; after cutover filter `branch=main&event=workflow_dispatch` | Approved final promotion workflow result; links to promotion runs |
+
+Use native GitHub Actions status badges with the pattern
+`https://github.com/NorskHelsenett/ror-api/actions/workflows/<file>/badge.svg` and
+the filters above. Each image must have meaningful alt text and a clickable link
+to the corresponding workflow, not a static hand-maintained "passing" label.
+
+Badges are informational, not release authorization. A workflow badge represents
+the latest matching run, not necessarily the current HEAD or the currently
+published RC, and it may be cached. A failed new candidate can make the RC badge
+red while CD correctly continues to use the previous passing RC. Candidate-specific
+eligibility must still come from verified run conclusions and artifact digests.
+Do not label a generic latest tag badge "approved release" or "passing RC".
+
+Validation: check badge URLs/filters against the implemented triggers, open each
+workflow link, and verify rendering after the workflows are published. Confirm
+failed candidates remain visible as failed workflow runs without creating a new
+CD-visible RC. No deployment status badge is provided by this release pipeline.
+
 ## Operator runbook after implementation
 
 1. Merge API changes. Inspect the integration result for the merge SHA.
@@ -172,4 +202,5 @@ to discover, and no deployment or release is triggered by this path.
 - The old tag-triggered bypass is gone; stable `latest` is unchanged by candidate attempts, and RC selectors expose only successfully tested candidates.
 - Failure, cancellation, supersession, concurrency, and partial-publication recovery have executable tests.
 - Repository docs describe operator commands, permissions, evidence, and recovery. GitHub-side settings are verified, not merely documented.
+- The API README links status badges for PR tests, main integration, RC publication, and final promotion; badge labels/filters match the real workflows and never replace the release gates.
 - No deployment is performed by these workflows. External CD may automatically deploy a published, passing RC; this is intentional. The gate covers the implemented 34 scenarios, not unimplemented broker/agent/Kubernetes workflows.
