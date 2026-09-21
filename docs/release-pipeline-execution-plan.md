@@ -12,6 +12,7 @@ and GitHub-side release/approval settings remain unimplemented.
 - Merges to `ror-api/main` run integration tests for feedback only.
 - Release candidates are requested manually with a target final version and API commit/ref.
 - Every RC is compiled with the final version: target `v1.25.0` means `ROR_VERSION=v1.25.0`, even when published as `v1.25.0-rc.1`.
+- Release integration testing is amd64-only on a native runner. There is no arm64 test gate. Existing amd64/arm64 image builds may remain; each published platform must build successfully, but arm64 is not claimed as integration-tested.
 - Each candidate records the actual source SHA. A different commit for the same target produces a new RC, never overwrites an existing RC.
 - RC images, RC charts, RC Git tags, and GitHub prereleases are published only after the build and all required integration and packaging tests succeed. They may be published before final-release approval, never with pending or failed tests.
 - Untested candidates remain local to CI runners or in access-controlled workflow artifacts. No untested image is pushed to an external registry, even under a temporary or commit-scoped tag.
@@ -57,11 +58,11 @@ Keep ordinary current-source and snapshot regression tests green.
 
 ### 2. Expose the reusable test workflow
 
-- Add `workflow_call` inputs for candidate artifact identity, expected archive/index/platform digests, platform, and optional baseline digest. Download artifacts only from the identified trusted build run and verify checksums before loading.
+- Add `workflow_call` inputs for candidate artifact identity, expected archive/index/amd64 manifest digests, and optional baseline digest. Default platform to `linux/amd64` and reject other workflow platforms. Download artifacts only from the identified trusted build run and verify checksums before loading.
 - Pin the called workflow in consumers to a literal reviewed `ror-test` commit SHA.
 - Explicitly check out `NorskHelsenett/ror-test` at that same SHA; a reusable workflow's default checkout would otherwise check out its caller.
-- Use runner architectures matching each image platform where available; qualify emulation explicitly if native runners are unavailable.
-- Upload reports on success and failure, with unique names per platform and candidate.
+- Use a single native amd64 runner (`ubuntu-24.04`) with an explicit `x86_64` check. Do not add an arm64 integration matrix.
+- Upload reports on success and failure, with unique names per amd64 candidate and attempt.
 - Provide read-only access to private harness repositories, workflow artifacts, and baseline packages. Build/test jobs must have no external package-write credentials; only the gated publication job gets registry write access.
 
 Validation: call the workflow from a temporary API validation workflow, not only
@@ -89,8 +90,8 @@ there must be no corresponding public RC tag, image, chart, or prerelease.
 - Use job sequence `prepare -> build-artifacts -> integration-and-chart-validation -> verify-results -> publish-rc`. Upload diagnostic reports separately on success/failure, without publication permissions.
 - Reuse the existing amd64/arm64 build matrix and ldflags, but set Version to the target final version, Commit to the selected source SHA, and LibVer to the selected API dependency.
 - Remove dependency-changing `go get` commands, pin generator/tool versions, use readonly dependency resolution, and reject unexpected module-file changes.
-- Export built images into checksummed OCI artifacts, including the intended multi-platform index. Run the reusable integration workflow on each platform manifest that will be included in that index. Do not push externally yet.
-- Build and validate RC/final chart packages before the success gate, as specified in step 5. If any required architecture, assertion, packaging check, or report is missing or unsuccessful, do not enter publication.
+- Export built images into checksummed OCI artifacts, including the intended multi-platform index. Run the reusable integration workflow only on its amd64 manifest. Do not push externally yet. Record other platforms as built but not integration-tested.
+- Build and validate RC/final chart packages before the success gate, as specified in step 5. If any published platform build, amd64 integration assertion, packaging check, or required report is missing or unsuccessful, do not enter publication. Arm64 integration reports are not required.
 - `verify-results` requires every required job conclusion to equal `success`, complete expected scenario reports, and exact matching build/test digests. A job merely finishing is not sufficient; `always()` may collect reports but must never authorize publishing.
 - Only `publish-rc` receives package/content write permissions. Copy the tested OCI manifests and blobs without rebuilding/recompressing, preserving their digests. Publish the validated RC chart, RC Git tag at the tested commit, and GitHub prerelease containing successful test evidence. No final tag or stable `latest` may be written by this path.
 - Serialize RC publication. Recheck attempt ordering so a slower older run cannot replace a newer RC pointer. Retry partial publication only for the same successful candidate and matching digests/checksums.
@@ -98,7 +99,7 @@ there must be no corresponding public RC tag, image, chart, or prerelease.
 - Record failures/cancellations in CI only. A failed attempt publishes nothing; starting another commit for the same target builds a new internal attempt and requires fresh tests.
 
 Validation: API version metadata inside the RC reports the target final version
-and correct commit. Force an integration failure on either architecture, cancel
+and correct commit. Force an amd64 integration failure or a platform build failure, cancel
 a job, skip a required job, omit a report, and fail chart validation. Each case
 must produce zero external image pushes, RC charts, RC tags, or prereleases;
 existing RC pointers, final artifacts, and stable `latest` remain untouched.
@@ -199,7 +200,7 @@ CD-visible RC. No deployment status badge is provided by this release pipeline.
 ## Completion criteria
 
 - Prebuilt-image mode passes the existing 34 scenarios without rebuilding API source.
-- Both published architectures have required passing test evidence.
+- The amd64 candidate has complete passing integration evidence from a native runner. Other published architectures require successful builds but no integration-test gate; their untested status is explicit.
 - No untested or failed candidate is pushed to an external registry. Failed/cancelled/skipped/incomplete builds or tests create no RC chart, tag, or prerelease and never change a CD-tracked RC pointer.
 - New commits can generate new immutable RCs for one target version.
 - Final publication is impossible through the supported workflows without complete successful integration tests and reviewer approval.

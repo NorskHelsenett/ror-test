@@ -9,8 +9,9 @@ The API candidate builder and final promotion gate are not implemented here.
 Prerequisites: Docker with the containerd image store (native OCI archive loading),
 Go from this module, Bash, and the candidate archive. Source checkout of ror-api
 or shared ror is not required by archive mode. The candidate must be a Linux image
-for the selected platform. The reusable workflow uses native runners; local
-cross-architecture runs require independently configured emulation.
+for the selected platform. Release integration tests run only on native amd64.
+The local harness still supports arm64 development; local cross-architecture
+runs require independently configured emulation.
 
 The build job should export an **uncompressed OCI tar archive** as `candidate.tar`.
 For Docker Buildx, use `--output type=oci,dest=candidate.tar`. Record the archive
@@ -21,7 +22,7 @@ new expected values from an untrusted download and call that verification.
 E2E_CANDIDATE_ARCHIVE=/absolute/path/candidate.tar \
 E2E_CANDIDATE_SHA256=sha256:<archive-checksum> \
 E2E_CANDIDATE_DIGEST=sha256:<root-index-or-manifest-digest> \
-E2E_CANDIDATE_PLATFORM=linux/arm64 \
+E2E_CANDIDATE_PLATFORM=linux/amd64 \
 bash testenv/run.sh run
 ```
 
@@ -79,10 +80,6 @@ reviewed, published 40-character ror-test commit SHA):
 ```yaml
 integration:
   needs: build
-  strategy:
-    fail-fast: false
-    matrix:
-      platform: [linux/amd64, linux/arm64]
   uses: NorskHelsenett/ror-test/.github/workflows/candidate-e2e.yml@<HARNESS_SHA>
   permissions:
     contents: read
@@ -92,8 +89,8 @@ integration:
     artifact_id: ${{ needs.build.outputs.artifact_id }}
     archive_sha256: ${{ needs.build.outputs.archive_sha256 }}
     index_digest: ${{ needs.build.outputs.index_digest }}
-    manifest_digest: ${{ matrix.platform == 'linux/arm64' && needs.build.outputs.arm64_digest || needs.build.outputs.amd64_digest }}
-    platform: ${{ matrix.platform }}
+    manifest_digest: ${{ needs.build.outputs.amd64_digest }}
+    platform: linux/amd64
     harness_sha: <HARNESS_SHA>
     source_sha: ${{ needs.build.outputs.source_sha }}
   secrets:
@@ -109,18 +106,20 @@ credentials. Optional private GHCR baselines need package-read access for the
 caller token. Build/test jobs must not receive package-write credentials.
 
 Inputs are `artifact_id`, `archive_sha256`, `index_digest`, `manifest_digest`,
-`platform`, `harness_sha`, `source_sha`, and optional `baseline_image`.
+`harness_sha`, `source_sha`, optional `platform` (defaults to `linux/amd64`), and
+optional `baseline_image`. Other workflow platforms are rejected.
 Artifact layout must contain `candidate.tar` at its root. Artifact IDs are stable;
 names alone are not used to select release candidates.
 
-`linux/amd64` uses `ubuntu-24.04`; `linux/arm64` uses `ubuntu-24.04-arm`. Architecture
-is checked explicitly. Runner availability depends on the repository's GitHub
-plan; unavailable native runners are a rollout blocker, not permission to skip a
-platform. Docker is configured with the containerd snapshotter for OCI import.
+The job uses `ubuntu-24.04` and explicitly checks for native `x86_64`. There is no
+architecture test matrix or arm64 runner requirement. Docker is configured with
+the containerd snapshotter for OCI import. A multi-platform archive is allowed,
+but only its amd64 manifest is executed; arm64 contents do not gain integration
+coverage from this run.
 
 ## Evidence and downstream gate
 
-On success the job outputs `evidence_artifact_id` and uploads per-platform evidence:
+On success the job outputs `evidence_artifact_id` and uploads amd64 evidence:
 
 - `candidate-image.json`: archive checksum, index/manifest/config digests, platform.
 - `candidate-runtime.json`: actual loaded image ID and platform only, no environment.
@@ -141,10 +140,11 @@ No success evidence is uploaded if the gate fails. Failure/cancellation uploads
 only selected diagnostic reports, never the archive, binary, tokens, or startup
 logs. An absent success artifact/output, skipped job, timeout, cancellation,
 nonzero run exit or incomplete report must block **all RC publication** downstream.
-For matrix jobs, do not rely on a single reusable-workflow output to aggregate
-architectures: require the complete matrix to succeed and inspect the distinct
-per-platform artifacts. The publishing workflow is responsible for that aggregate
-gate and for preserving the tested index/platform digests during external push.
+The publishing workflow must require this amd64 job to succeed and validate its
+evidence; it must not wait for arm64 test evidence. Existing multi-platform builds
+may remain, with build success required for every published platform, but only
+amd64 is integration-tested. Publication must preserve the verified index and
+tested amd64 manifest digests during external push.
 
 ## Verification commands
 
