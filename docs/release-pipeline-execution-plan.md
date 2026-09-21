@@ -1,19 +1,38 @@
 # Release pipeline execution plan
 
-Status: partially implemented in ror-test; release publication is not implemented.
-Implementation update: the ror-test archive verifier, prebuilt runner mode, strict
-report gate and reusable candidate workflow are now implemented locally; see
-[candidate testing](prebuilt-candidate-testing.md). Real cross-repository workflow
-execution has now reached native amd64 candidate startup in
-[run 35573448184](https://github.com/NorskHelsenett/ror-api/actions/runs/35573448184).
-Build, archive handoff, and verifier tests passed; synthetic seeding failed before
-API scenarios ran. Local amd64 reproduction confirmed that Mongo's temporary
-loopback initialization server could pass the old health check prematurely.
-The authenticated service-host health check, three-fresh-start regression, and
-seed-only CI diagnostics are fixed locally; the caller needs a published updated
-harness pin before retrying GitHub. Native GitHub suite/evidence success is still
-pending. A test-only API caller exists; production RC/final publishing and approval
-controls remain unimplemented.
+Status: harness and test-only cross-repository handoff verified on GitHub;
+RC allocation and test-gated publication are now implemented locally in ror-api,
+but not committed/published or exercised against production registries. See the
+[RC runbook](../../ror-api/docs/release-candidates.md). Final promotion and automatic
+post-merge integration remain pending; the legacy tag publisher is replaced locally
+with a read-only disabled notice until the final approval gate is implemented.
+
+The OCI verifier, prebuilt runner, strict report gate, reusable test workflow and
+API test-only caller are implemented; see [candidate testing](prebuilt-candidate-testing.md).
+The initial seed-startup race was fixed by requiring authenticated Mongo readiness
+through its service hostname. The corrected harness is pinned at
+`39314b715eb2de8b1dc8e97585a1db74cd8d09b3`.
+
+Verified on 2026-09-21 against API commit
+`0cd0aeefc210e87c04289c73e1524d93fd0266c3`, target binary version `v0.0.0`:
+
+| Rehearsal | GitHub run | Observed result |
+|---|---|---|
+| Normal candidate | [35575949435](https://github.com/NorskHelsenett/ror-api/actions/runs/35575949435) | Build, native amd64 integration (34/34), success-evidence upload, and API handoff verification all succeeded |
+| Deliberate checksum mismatch | [35576593341](https://github.com/NorskHelsenett/ror-api/actions/runs/35576593341) | Build succeeded; integration rejected the archive checksum before API startup; success-evidence validation/upload and `verify-handoff` were skipped |
+
+The negative run retained only its candidate archive, build metadata and diagnostic
+artifact; it produced no success-evidence or verified-rehearsal artifact. The red
+workflow conclusion is intentional and confirms checksum rejection, not an outage.
+Neither run published images, RC tags, charts or releases. These checks do not
+prove cancellation, timeout, or future publisher behavior; those remain explicit
+rollout tests. Local RC implementation adds a dedicated CAS-updated state branch,
+private dual-platform archives, amd64-only tests, chart equivalence checks, and
+publication opt-in defaulting to false. The multi-platform archive retains the
+exact amd64 manifest exposed in a separate single-platform test archive. Private
+local rehearsal passed 34/34 amd64 scenarios plus archive/chart verification.
+Next: review/merge and remote non-publishing RC rehearsal, then isolated publication
+testing and approval-gated final promotion. No actual RC has been published.
 
 ## Agreed behavior
 
