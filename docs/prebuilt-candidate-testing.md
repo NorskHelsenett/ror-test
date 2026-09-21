@@ -137,8 +137,9 @@ identity, exact artifact/run/attempt and all required job conclusions; never acc
 a standalone uploaded JSON file as proof of eligibility.
 
 No success evidence is uploaded if the gate fails. Failure/cancellation uploads
-only selected diagnostic reports, never the archive, binary, tokens, or startup
-logs. An absent success artifact/output, skipped job, timeout, cancellation,
+only selected diagnostic reports and a bounded synthetic-only `seed.log`, never
+the archive, binary, real tokens, full startup logs, Vault logs, or snapshot logs.
+An absent success artifact/output, skipped job, timeout, cancellation,
 nonzero run exit or incomplete report must block **all RC publication** downstream.
 The publishing workflow must require this amd64 job to succeed and validate its
 evidence; it must not wait for arm64 test evidence. Existing multi-platform builds

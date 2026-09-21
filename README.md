@@ -310,6 +310,27 @@ asserted. Steps stop on the first failure to avoid misleading dependent failures
 
 ## Harness tests
 
+### MongoDB startup regression
+
+```sh
+bash testenv/seed-test.sh
+```
+
+This starts amd64 MongoDB and the actual seed container three times, with a new
+volume each time. Each run must exit successfully and contain exactly four ACL
+grants, two cluster API keys, and six resources before normal API startup seeding.
+On an arm64 workstation it requires working amd64 emulation.
+
+An unauthenticated localhost ping can pass against Mongo's temporary initialization
+server while it is still bound only to loopback. That caused the seed container
+to fail with `ECONNREFUSED` despite a healthy Mongo status. Readiness now uses the
+authenticated `mongodb` service address, the same network path used by seeding.
+Do not retry a partially applied seed: fixture collisions deliberately fail closed.
+
+On synthetic CI failure, the last 80 lines of the seed service log are printed
+and uploaded as `seed.log`. These contain only the synthetic seed process's
+diagnostics. Full startup logs, Vault logs, and snapshot-mode logs stay local.
+
 ```sh
 go test -race ./internal/e2e ./cmd/e2e
 ```

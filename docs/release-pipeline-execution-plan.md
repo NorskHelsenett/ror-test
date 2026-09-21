@@ -4,8 +4,16 @@ Status: partially implemented in ror-test; release publication is not implemente
 Implementation update: the ror-test archive verifier, prebuilt runner mode, strict
 report gate and reusable candidate workflow are now implemented locally; see
 [candidate testing](prebuilt-candidate-testing.md). Real cross-repository workflow
-execution and native amd64 verification are still pending. Steps 3-8 in ror-api
-and GitHub-side release/approval settings remain unimplemented.
+execution has now reached native amd64 candidate startup in
+[run 35573448184](https://github.com/NorskHelsenett/ror-api/actions/runs/35573448184).
+Build, archive handoff, and verifier tests passed; synthetic seeding failed before
+API scenarios ran. Local amd64 reproduction confirmed that Mongo's temporary
+loopback initialization server could pass the old health check prematurely.
+The authenticated service-host health check, three-fresh-start regression, and
+seed-only CI diagnostics are fixed locally; the caller needs a published updated
+harness pin before retrying GitHub. Native GitHub suite/evidence success is still
+pending. A test-only API caller exists; production RC/final publishing and approval
+controls remain unimplemented.
 
 ## Agreed behavior
 

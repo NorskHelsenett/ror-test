@@ -67,6 +67,16 @@
 			],
 			"problemMatcher": [],
 			"group": "test"
+		},
+		{
+			"label": "e2e: seed startup regression",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/testenv/seed-test.sh"
+			],
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }

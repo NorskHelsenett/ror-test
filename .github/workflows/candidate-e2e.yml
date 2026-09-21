@@ -175,3 +175,4 @@ jobs:
             ror-test/artifacts/*/candidate.json
             ror-test/artifacts/*/candidate.xml
             ror-test/artifacts/*/exit-code.txt
+            ror-test/artifacts/*/seed.log

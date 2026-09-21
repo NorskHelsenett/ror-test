@@ -56,6 +56,11 @@ cleanup() {
   local exit_code=$?
   if [[ "$exit_code" != 0 ]]; then
     compose logs --no-color > "$E2E_ARTIFACTS/startup.log" 2>&1 || true
+    if [[ "${CI:-}" == true && -z "${E2E_SNAPSHOT:-}" ]]; then
+      compose logs --no-color --tail 80 seed > "$E2E_ARTIFACTS/seed.log" 2>&1 || true
+      printf 'Synthetic seed diagnostics:\n' >&2
+      cat "$E2E_ARTIFACTS/seed.log" >&2
+    fi
     printf 'Run failed (%s). Logs: %s/startup.log\n' "$exit_code" "$E2E_ARTIFACTS" >&2
   fi
   printf '%s\n' "$exit_code" > "$E2E_ARTIFACTS/exit-code.txt"

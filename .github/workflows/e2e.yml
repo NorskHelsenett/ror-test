@@ -65,6 +65,7 @@ jobs:
         run: |
           go test -race ./internal/e2e ./cmd/e2e
           node --test .github/scripts/*.test.cjs
+          bash testenv/seed-test.sh
           bash testenv/snapshot-test.sh --restore
       - name: Run synthetic E2E
         env:
@@ -93,3 +94,4 @@ jobs:
             ror-test/artifacts/*/*-image.txt
             ror-test/artifacts/*/fixtures.sha256
             ror-test/artifacts/*/build.txt
+            ror-test/artifacts/*/seed.log

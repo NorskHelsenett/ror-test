@@ -5,7 +5,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: test
       MONGO_INITDB_ROOT_PASSWORD: synthetic-only
     healthcheck:
-      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      test: [CMD, mongosh, "mongodb://test:synthetic-only@mongodb:27017/admin", --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
       interval: 2s
       timeout: 5s
       retries: 60
