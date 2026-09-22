@@ -150,7 +150,7 @@ jobs:
         run: node ror-test/.github/scripts/verify-candidate-evidence.cjs ror-test
       - name: Upload verified evidence
         id: evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: candidate-evidence-amd64-${{ inputs.artifact_id }}-${{ github.run_attempt }}
           if-no-files-found: error
@@ -167,7 +167,7 @@ jobs:
             ror-test/artifacts/*/fixtures.sha256
       - name: Upload diagnostic reports on failure
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: candidate-diagnostics-amd64-${{ inputs.artifact_id }}-${{ github.run_attempt }}
           retention-days: 7
