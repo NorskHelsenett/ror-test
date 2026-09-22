@@ -106,7 +106,7 @@ jobs:
         with:
           daemon-config: |
             { "features": { "containerd-snapshotter": true } }
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ror-test/go.mod
           cache-dependency-path: ror-test/go.sum
