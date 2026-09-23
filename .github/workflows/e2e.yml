@@ -28,7 +28,7 @@ jobs:
         run: node --test ror-test/.github/scripts/resolve-refs.test.cjs
       - name: Resolve repository refs to commit SHAs
         id: refs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           SHARED_REF: ${{ inputs.shared_ref || 'main' }}
           API_REF: ${{ inputs.api_ref || 'main' }}
