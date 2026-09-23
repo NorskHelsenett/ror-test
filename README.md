@@ -164,7 +164,8 @@ The admin, reader, and outsider are OIDC **users**. In particular, the "reader"
 is a human test principal, not an agent or cluster. The mock issuer signs their
 tokens; the real API middleware validates them and derives group names using the
 user's email domain. Separate API keys authenticate two real **cluster** identities
-through the production `X-API-KEY` middleware, which sets `IdentityTypeCluster`.
+and one **service** identity through the production `X-API-KEY` middleware, which
+sets `IdentityTypeCluster` and `IdentityTypeService` respectively.
 
 | Identity | API group | Seeded permissions |
 |---|---|---|
@@ -173,6 +174,7 @@ through the production `X-API-KEY` middleware, which sets `IdentityTypeCluster`.
 | `outsider@e2e.invalid` | `outsiders@e2e.invalid` | No fixture grant |
 | `e2e-cluster-a` (cluster identity) | `11111111-1111-4111-8111-111111111111@cluster.ror.system` | `ror:read/create/update` on KubernetesCluster A |
 | `e2e-cluster-b` (cluster identity) | `22222222-2222-4222-8222-222222222222@cluster.ror.system` | `ror:read/create/update` on KubernetesCluster B |
+| `e2e-service` (service identity) | `e2e-service@service.ror.system` | No fixture grant; authenticates only |
 
 Cluster A is `11111111-1111-4111-8111-111111111111`; cluster B is
 `22222222-2222-4222-8222-222222222222`. Each has a seeded KubernetesCluster
@@ -225,8 +227,9 @@ Authenticated with `OUTSIDER_TOKEN`; no fixture grant.
 
 Authenticated with `ADMIN_TOKEN`; global ACL data permits reads and updates across
 both cluster ownership boundaries. Existing ACL CRUD checks are supplemented by
-six resource PATCH/readback pairs. Resource updates run last (steps 23-34), after
-B's unchanged-state assertions, so they cannot invalidate the isolation checks.
+six resource PATCH/readback pairs. Resource updates run after B's unchanged-state
+assertions (steps 23-34), so they cannot invalidate the isolation checks; the
+identity steps (35-42) run last and mutate nothing.
 
 | # | Scenario | How it is tested | Expected result |
 |---|---|---|---|
@@ -274,6 +277,26 @@ denied write to that object, before the admin is allowed to modify it.
 | 20 | `cluster B Pod remains unchanged` | B's API key sends GET for B's Pod | HTTP **200**; correct kind/UID and label still `original` |
 | 22 | `cluster B Deployment remains unchanged` | B's API key sends GET for B's Deployment | HTTP **200**; correct kind/UID and label still `original` |
 
+#### Identity endpoint (`GET /v2/self`)
+
+These steps pin the published `/v2/self` contract (`apicontractsv2self.SelfData`
+plus `identitymodels.AuthInfo`) for every authentication path. Each asserts the
+`/user` object as a **whole**, so a missing or extra field fails: a user response
+carries no `uid`, and cluster/service responses carry no `email` or `groups`.
+`/auth/expirationTime` is ignored for token identities because it is `now+3600`,
+but asserted for the API-key identities where the fixture fixes it at 2099.
+
+| # | Scenario | How it is tested | Expected result |
+|---|---|---|---|
+| 35 | `self anonymous denied` | `GET /v2/self` with no authorization | HTTP **401** |
+| 36 | `self invalid token denied` | `GET /v2/self` with `Bearer invalid` | HTTP **401** |
+| 37 | `self admin user shape` | Admin token | HTTP **200**; `type` `User`, `auth.authProvider` `OIDC`, `auth.authProviderId` `admin@e2e.invalid`, `user` exactly `{email, groups:[admins@e2e.invalid]}` |
+| 38 | `self reader user shape` | Reader token | HTTP **200**; same shape with `reader@e2e.invalid` and `readers@e2e.invalid` |
+| 39 | `self outsider authenticates without grants` | Outsider token | HTTP **200**; groups `[outsiders@e2e.invalid]`. Authentication succeeds without any ACL grant, so the endpoint is authn-only, not authz-gated |
+| 40 | `self cluster A shape` | `CLUSTER_A_KEY` | HTTP **200**; `type` `Cluster`, `authProvider` `APIKEY`, `authProviderId` `e2e-cluster-a`, `auth.expirationTime` `2099-01-01T00:00:00Z`, `user` exactly `{name: e2e-cluster-a, uid: <cluster A UID>}` |
+| 41 | `self cluster B shape` | `CLUSTER_B_KEY` | HTTP **200**; same shape for cluster B |
+| 42 | `self service shape` | `SERVICE_KEY` | HTTP **200**; `type` `Service`, `authProviderId` `e2e-service`, `user` exactly `{name: e2e-service}` |
+
 ### Shared assertions and limits
 
 For steps 11-34 all resource operations use `/v2/resources/uid/<uid>`. PATCH bodies
@@ -284,7 +307,7 @@ the current API contract: the read-filtered lookup prevents PATCH from seeing
 B's object before it reaches the explicit write-permission check. It is not
 treated as interchangeable with **403** in the suite.
 
-The single-run pass condition is all **34/34** steps executed without failures
+The single-run pass condition is all **42/42** steps executed without failures
 and command exit code **0**. Any unexpected status, failed assertion, failed
 capture, or transport error makes the run fail. Execution stops at the first
 failed step, so later dependent steps are **not tested**, not implicitly passed.
@@ -318,8 +341,8 @@ bash testenv/seed-test.sh
 
 This starts amd64 MongoDB and the actual seed container three times, with a new
 volume each time. Each run must exit successfully and contain exactly four ACL
-grants, two cluster API keys, and six resources before normal API startup seeding.
-On an arm64 workstation it requires working amd64 emulation.
+grants, two cluster API keys, one service API key, and six resources before normal
+API startup seeding. On an arm64 workstation it requires working amd64 emulation.
 
 An unauthenticated localhost ping can pass against Mongo's temporary initialization
 server while it is still bound only to loopback. That caused the seed container
@@ -360,12 +383,12 @@ input; the containing test command still exits **0** when that rejection occurs.
 | Command | How it runs | Expected successful result |
 |---|---|---|
 | `go test -race ./internal/e2e ./cmd/e2e` | Local in-process tests above, no Docker stack | Both packages pass; exit **0** |
-| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 34/34 steps`; no result failures; exit **0** |
-| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **34/34**; `comparison: 0 differences`; exit **0** |
+| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 42/42 steps`; no result failures; exit **0** |
+| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **42/42**; `comparison: 0 differences`; exit **0** |
 | `bash testenv/run.sh compare <image>` | Run current source and the selected baseline image independently with identical fixtures | Both must satisfy the scenario assertions and have matching normalized responses; zero differences and exit **0** only if equivalent |
 | `bash testenv/snapshot-test.sh` | Validate merged Compose configuration and attempt a nonexistent snapshot | Configuration is valid; the nonexistent snapshot is rejected; overall exit **0** |
 | `bash testenv/snapshot-test.sh --restore` | Create a synthetic MongoDB archive, discard the source database, and restore into a fresh one | Exactly one `resourcesv2` document with `uid=snapshot-probe`; zero `apikeys` documents; identical archive SHA-256 before/after; exit **0** |
-| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **34/34**; zero differences; exit **0** |
+| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **42/42**; zero differences; exit **0** |
 
 The snapshot fixture deliberately includes an API-key record to prove that the
 restore excludes it. This is not a comprehensive sanitizer test, nor proof that
@@ -405,14 +428,14 @@ After stack execution, inspect `artifacts/<run-id>/`:
 
 | Artifact | Expected content and interpretation |
 |---|---|
-| `candidate.json`, `baseline.json` | `expected: 34`, 34 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
-| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="34"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
+| `candidate.json`, `baseline.json` | `expected: 42`, 42 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
+| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="42"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
 | `diff.json` | No differences currently serializes as JSON `null`; a mismatch produces entries with `name` and `reason`, not raw response bodies |
 | `exit-code.txt` | `0` for a completed successful orchestration; nonzero for failure after the cleanup trap was installed |
 | `startup.log` | Local dependency/application diagnostics retained on failure; may contain sensitive information and is not uploaded by CI |
 | `*-image.txt`, `build.txt`, `fixtures.sha256`, optional `snapshot.sha256` | Image identity, Go build metadata, and input hashes for reproducing a run; not correctness assertions |
 
-The `34/34 steps` console line counts executed steps, not passing assertions:
+The `42/42 steps` console line counts executed steps, not passing assertions:
 the last step can fail after all steps have executed. Always check command exit
 status and report failures. Startup/configuration errors may occur before JSON
 or JUnit reports are written. Preflight/build errors can also occur before the
@@ -441,7 +464,7 @@ correctness remain untested by this suite.
 ## Verified locally
 
 - Harness tests, including race detection, passed.
-- All 34 user ACL, cluster isolation, and admin resource-update scenarios passed against current API.
+- All 42 user ACL, cluster isolation, admin resource-update, and identity (`/v2/self`) scenarios passed against current API.
 - Two fresh-data runs passed with zero comparison differences.
 - Two independent synthetic archive restores passed the same scenarios with
   zero differences; excluded API keys were not restored and source bytes stayed
@@ -455,8 +478,9 @@ into a pass. No production snapshot or remote GitHub CI run was performed.
 
 ## Coverage boundary
 
-The suite covers user ACL contracts and cluster API-key authentication with
-self/direct-child update isolation. It is not yet full platform E2E coverage:
+The suite covers user ACL contracts, cluster API-key authentication with
+self/direct-child update isolation, and the `/v2/self` identity contract for user,
+cluster and service principals. It is not yet full platform E2E coverage:
 ror-auth broker flows, cluster/service API-key provisioning through registration,
 multi-level ownership graphs, real agent ingestion, CLI workflows, Kubernetes RBAC, upgrade
 migrations, and dependency rotation/recovery need additional suites. Planned

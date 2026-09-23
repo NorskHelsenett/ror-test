@@ -22,6 +22,7 @@ for attempt in 1 2 3; do
     const target = db.getSiblingDB("nhn-ror");
     if (target.acl.countDocuments({}) !== 4) throw new Error("expected four grants");
     if (target.apikeys.countDocuments({type:"Cluster"}) !== 2) throw new Error("expected two cluster keys");
+    if (target.apikeys.countDocuments({type:"Service"}) !== 1) throw new Error("expected one service key");
     if (target.resourcesv2.countDocuments({}) !== 6) throw new Error("expected six resources");
   '
   compose down --volumes --remove-orphans
