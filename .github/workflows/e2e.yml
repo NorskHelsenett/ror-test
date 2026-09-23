@@ -51,7 +51,7 @@ jobs:
           path: ror-api
           token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ror-test/go.mod
           cache-dependency-path: |
