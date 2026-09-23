@@ -42,4 +42,13 @@ for (const cluster of clusters) {
     });
   }
 }
+const serviceIdentifier = "e2e-service";
+if (target.apikeys.countDocuments({identifier: serviceIdentifier}) !== 0) {
+  throw new Error("Service fixture collision: reserved test identity already exists");
+}
+target.apikeys.insertOne({
+  _id: serviceIdentifier, identifier: serviceIdentifier, type: "Service",
+  hash: crypto.createHash("sha512").update(`${serviceIdentifier}-synthetic-onlysynthetic-only`).digest("hex"),
+  expires: ISODate("2099-01-01T00:00:00Z"), created: ISODate("2026-01-01T00:00:00Z")
+});
 print("Seeded synthetic ACL and cluster-resource fixture v2");
