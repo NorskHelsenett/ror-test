@@ -3,7 +3,7 @@ module github.com/NorskHelsenett/ror-test
 go 1.27.1
 
 require (
-	github.com/NorskHelsenett/ror v1.25.4
+	github.com/NorskHelsenett/ror v1.25.7
 	github.com/biter777/countries v1.7.5
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.46.0

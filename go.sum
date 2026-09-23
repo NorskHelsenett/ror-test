@@ -1,5 +1,5 @@
-github.com/NorskHelsenett/ror v1.25.4 h1:YK4ocM1A10Sp1xwBaP6MK8cOgJfz3jCNyBa7rKeS0F4=
-github.com/NorskHelsenett/ror v1.25.4/go.mod h1:inAEFRUnR8hvRUgsVap1Nw7RI4AyElcF4CraYOSsE2g=
+github.com/NorskHelsenett/ror v1.25.7 h1:kGd5iPc9/6WH+VbORctnsp/2RiIRyPfEvSk+7hXkSXw=
+github.com/NorskHelsenett/ror v1.25.7/go.mod h1:bKy91N5lvlOXjU4nhdwGJwZ2H/d2nFifxAXMJwBeQHs=
 github.com/biter777/countries v1.7.5 h1:MJ+n3+rSxWQdqVJU8eBy9RqcdH6ePPn4PJHocVWUa+Q=
 github.com/biter777/countries v1.7.5/go.mod h1:1HSpZ526mYqKJcpT5Ti1kcGQ0L0SrXWIaptUWjFfv2E=
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
