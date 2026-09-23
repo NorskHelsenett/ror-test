@@ -95,7 +95,7 @@ jobs:
         run: |
           [[ "$(git -C ror-test rev-parse HEAD)" == "$HARNESS_SHA" ]]
           [[ "$(uname -m)" == x86_64 && "$PLATFORM" == linux/amd64 ]]
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ inputs.artifact_id }}
           path: candidate-input
