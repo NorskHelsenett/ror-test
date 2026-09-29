@@ -81,7 +81,7 @@ jobs:
           if [[ -n "$BASELINE_IMAGE" ]]; then
             [[ "$BASELINE_IMAGE" =~ ^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[0-9a-f]{64}$ ]]
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: NorskHelsenett/ror-test
           ref: ${{ inputs.harness_sha }}
