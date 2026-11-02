@@ -45,9 +45,9 @@
     {"name": "self cluster A shape", "method": "GET", "path": "/v2/self", "headers": {"X-API-KEY": "${CLUSTER_A_KEY}"}, "status": 200, "equals": {"/type": "Cluster", "/auth/authProvider": "APIKEY", "/auth/authProviderId": "e2e-cluster-a", "/auth/expirationTime": "2099-01-01T00:00:00Z", "/user": {"name": "e2e-cluster-a", "uid": "${CLUSTER_A}"}}},
     {"name": "self cluster B shape", "method": "GET", "path": "/v2/self", "headers": {"X-API-KEY": "${CLUSTER_B_KEY}"}, "status": 200, "equals": {"/type": "Cluster", "/auth/authProvider": "APIKEY", "/auth/authProviderId": "e2e-cluster-b", "/user": {"name": "e2e-cluster-b", "uid": "${CLUSTER_B}"}}, "ignore": ["/auth/expirationTime"]},
     {"name": "self service shape", "method": "GET", "path": "/v2/self", "headers": {"X-API-KEY": "${SERVICE_KEY}"}, "status": 200, "equals": {"/type": "Service", "/auth/authProvider": "APIKEY", "/auth/authProviderId": "e2e-service", "/auth/expirationTime": "2099-01-01T00:00:00Z", "/user": {"name": "e2e-service"}}},
-    {"name": "grant token permits only its scoped read", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:read", "headers": {"Authorization": "${GRANT_TOKEN}"}, "status": 200},
-    {"name": "grant token denies access outside its subject", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_B}/ror:read", "headers": {"Authorization": "${GRANT_TOKEN}"}, "status": 403},
-    {"name": "grant token denies access outside its capabilities", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:update", "headers": {"Authorization": "${GRANT_TOKEN}"}, "status": 403},
-    {"name": "empty grants claim overrides group permissions", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:read", "headers": {"Authorization": "${EMPTY_GRANTS_TOKEN}"}, "status": 403}
+    {"name": "grant token permits only its scoped read", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:read", "headers": {"Authorization": "Bearer ${GRANT_TOKEN}"}, "status": 200},
+    {"name": "grant token denies access outside its subject", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_B}/ror:read", "headers": {"Authorization": "Bearer ${GRANT_TOKEN}"}, "status": 403},
+    {"name": "grant token denies access outside its capabilities", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:update", "headers": {"Authorization": "Bearer ${GRANT_TOKEN}"}, "status": 403},
+    {"name": "empty grants claim overrides group permissions", "method": "HEAD", "path": "/v2/acl/lookup/KubernetesCluster/${CLUSTER_A}/ror:read", "headers": {"Authorization": "Bearer ${EMPTY_GRANTS_TOKEN}"}, "status": 403}
   ]
 }
