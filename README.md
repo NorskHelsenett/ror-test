@@ -31,8 +31,9 @@ bash testenv/run.sh run
 
 Alternatively, run the VS Code task **e2e: synthetic stack**. It keeps the build
 in its own terminal. The script compiles current local API and shared-library
-sources, including uncommitted changes, then starts MongoDB, RabbitMQ, Valkey,
-Vault, a mock OIDC issuer, and the API. Vault issues real dependency credentials;
+sources, including uncommitted changes, then starts MongoDB 9.0.4, RabbitMQ,
+Valkey, Vault, a mock OIDC issuer, and the API. Vault issues real dependency
+credentials;
 the API's real authentication middleware validates signed test tokens.
 
 Each run has a unique Compose project and fresh database. No host service ports
