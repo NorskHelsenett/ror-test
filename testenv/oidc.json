@@ -6,7 +6,9 @@
     "requestMappings": [
       {"requestParam": "client_id", "match": "admin", "claims": {"sub": "admin", "aud": ["ror-e2e"], "email": "admin@e2e.invalid", "email_verified": true, "groups": ["admins"]}},
       {"requestParam": "client_id", "match": "reader", "claims": {"sub": "reader", "aud": ["ror-e2e"], "email": "reader@e2e.invalid", "email_verified": true, "groups": ["readers"]}},
-      {"requestParam": "client_id", "match": "outsider", "claims": {"sub": "outsider", "aud": ["ror-e2e"], "email": "outsider@e2e.invalid", "email_verified": true, "groups": ["outsiders"]}}
+      {"requestParam": "client_id", "match": "outsider", "claims": {"sub": "outsider", "aud": ["ror-e2e"], "email": "outsider@e2e.invalid", "email_verified": true, "groups": ["outsiders"]}},
+      {"requestParam": "client_id", "match": "grant-reader", "claims": {"sub": "grant-reader", "aud": ["ror-e2e"], "email": "grant-reader@e2e.invalid", "email_verified": true, "groups": ["admins"], "ror_grants": [{"scope": "KubernetesCluster", "subject": "11111111-1111-4111-8111-111111111111", "access": ["ror:read"]}]}},
+      {"requestParam": "client_id", "match": "empty-grants", "claims": {"sub": "empty-grants", "aud": ["ror-e2e"], "email": "empty-grants@e2e.invalid", "email_verified": true, "groups": ["admins"], "ror_grants": []}}
     ]
   }]
 }

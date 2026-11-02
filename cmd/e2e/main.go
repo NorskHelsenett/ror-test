@@ -80,7 +80,7 @@ func run(ctx context.Context, args []string) error {
 		}
 	}
 	variables := make(map[string]string)
-	for _, name := range []string{"ADMIN_TOKEN", "READER_TOKEN", "OUTSIDER_TOKEN"} {
+	for _, name := range []string{"ADMIN_TOKEN", "READER_TOKEN", "OUTSIDER_TOKEN", "GRANT_TOKEN", "EMPTY_GRANTS_TOKEN"} {
 		if value := os.Getenv(name); value != "" {
 			variables[name] = value
 		}
@@ -95,7 +95,13 @@ func run(ctx context.Context, args []string) error {
 				return err
 			}
 		}
-		for name, identity := range map[string]string{"ADMIN_TOKEN": "admin", "READER_TOKEN": "reader", "OUTSIDER_TOKEN": "outsider"} {
+		for name, identity := range map[string]string{
+			"ADMIN_TOKEN":        "admin",
+			"READER_TOKEN":       "reader",
+			"OUTSIDER_TOKEN":     "outsider",
+			"GRANT_TOKEN":        "grant-reader",
+			"EMPTY_GRANTS_TOKEN": "empty-grants",
+		} {
 			token, err := testToken(ctx, client, *oidc+"/default/token", identity)
 			if err != nil {
 				return err

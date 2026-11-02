@@ -95,7 +95,7 @@ services:
       KV_PORT: "6379"
       OIDC_PROVIDER: http://oidc:8080/default
       OIDC_CLIENT_ID: ror-e2e
-      OIDC_SIGNER_ISSUER: http://api:8080
+      OIDC_SIGNER_ISSUER: http://oidc:8080/default
     depends_on:
       vault-init: {condition: service_completed_successfully}
       seed: {condition: service_completed_successfully}

@@ -145,7 +145,8 @@ go run ./cmd/e2e compare -baseline artifacts/baseline.json \
   -candidate artifacts/local.json -out artifacts/diff.json
 ```
 
-Supply `ADMIN_TOKEN`, `READER_TOKEN`, and `OUTSIDER_TOKEN` in the environment,
+Supply `ADMIN_TOKEN`, `READER_TOKEN`, `OUTSIDER_TOKEN`, `GRANT_TOKEN`, and
+`EMPTY_GRANTS_TOKEN` in the environment,
 or use `-oidc http://127.0.0.1:<port>` with the supplied mock issuer configuration.
 Tokens are never command-line arguments. The runner only permits loopback origins
 or the explicit `api` container name with `-container`. It disables proxies and
@@ -155,8 +156,8 @@ port is not forwarded to production: only use disposable local targets.
 ## Scenarios and fixtures
 
 [testenv/seed.js](testenv/seed.js) contains deterministic bootstrap ACL data.
-[testenv/oidc.json](testenv/oidc.json) defines synthetic admin, reader, and outsider
-identities. [testenv/scenarios/acl.json](testenv/scenarios/acl.json) is the
+[testenv/oidc.json](testenv/oidc.json) defines synthetic admin, reader, outsider,
+grant-bearing, and explicit-empty-grants identities. [testenv/scenarios/acl.json](testenv/scenarios/acl.json) is the
 executable source of truth for the following expectations.
 
 ### Test identities and data
@@ -173,6 +174,8 @@ sets `IdentityTypeCluster` and `IdentityTypeService` respectively.
 | `admin@e2e.invalid` | `admins@e2e.invalid` | Global `ror:read/create/update/delete` and `ror:config:read/write` grants |
 | `reader@e2e.invalid` | `readers@e2e.invalid` | Only `ror:read` on KubernetesCluster A |
 | `outsider@e2e.invalid` | `outsiders@e2e.invalid` | No fixture grant |
+| `grant-reader@e2e.invalid` | `admins@e2e.invalid` | Token claim permits only `ror:read` on KubernetesCluster A, overriding the group's broader grants |
+| `empty-grants@e2e.invalid` | `admins@e2e.invalid` | Explicit empty token grant claim denies access despite the group's broader grants |
 | `e2e-cluster-a` (cluster identity) | `11111111-1111-4111-8111-111111111111@cluster.ror.system` | `ror:read/create/update` on KubernetesCluster A |
 | `e2e-cluster-b` (cluster identity) | `22222222-2222-4222-8222-222222222222@cluster.ror.system` | `ror:read/create/update` on KubernetesCluster B |
 | `e2e-service` (service identity) | `e2e-service@service.ror.system` | No fixture grant; authenticates only |
@@ -250,6 +253,19 @@ identity steps (35-42) run last and mutate nothing.
 | 32 | `admin reads persisted cluster B Pod update` | GET B's Pod | HTTP **200**; kind `Pod`, correct UID, and label `updated-by-admin` |
 | 33 | `admin updates cluster B Deployment` | PATCH B's Deployment with the admin label | HTTP **200** |
 | 34 | `admin reads persisted cluster B Deployment update` | GET B's Deployment | HTTP **200**; kind `Deployment`, correct UID, and label `updated-by-admin` |
+
+#### Grant-bearing tokens
+
+The mock issuer is configured as the trusted grant issuer in the isolated E2E
+stack. Both identities also have the admin group, so these checks prove that a
+present `ror_grants` claim takes precedence over broader group ACL data.
+
+| # | Scenario | How it is tested | Expected result |
+|---|---|---|---|
+| 43 | `grant token permits only its scoped read` | Grant token requests `ror:read` on A | HTTP **200** |
+| 44 | `grant token denies access outside its subject` | Grant token requests `ror:read` on B | HTTP **403** |
+| 45 | `grant token denies access outside its capabilities` | Grant token requests `ror:update` on A | HTTP **403** |
+| 46 | `empty grants claim overrides group permissions` | Token with `ror_grants: []` requests `ror:read` on A despite admin group membership | HTTP **403** |
 
 #### Cluster A (`e2e-cluster-a`)
 
