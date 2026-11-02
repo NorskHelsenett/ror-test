@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: mongo:8.0
+    image: mongo:9.0.4
     environment:
       MONGO_INITDB_ROOT_USERNAME: test
       MONGO_INITDB_ROOT_PASSWORD: synthetic-only
@@ -55,7 +55,7 @@ services:
       rabbitmq: {condition: service_healthy}
       valkey: {condition: service_healthy}
   seed:
-    image: mongo:8.0
+    image: mongo:9.0.4
     entrypoint: [mongosh, "mongodb://test:synthetic-only@mongodb:27017/admin", --quiet, /fixtures/seed.js]
     volumes:
       - ./seed.js:/fixtures/seed.js:ro
