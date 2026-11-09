@@ -4,7 +4,9 @@ if (target.acl.countDocuments({$or: [{_id: {$in: ["e2e-admin", "e2e-reader"]}}, 
 }
 target.acl.insertMany([
   {_id: "e2e-admin", version: 3, group: "admins@e2e.invalid", scope: "ror", subject: "all", access: ["ror:read", "ror:create", "ror:update", "ror:delete", "ror:config:read", "ror:config:write"], created: ISODate("2026-01-01T00:00:00Z")},
-  {_id: "e2e-reader", version: 3, group: "readers@e2e.invalid", scope: "KubernetesCluster", subject: "11111111-1111-4111-8111-111111111111", access: ["ror:read"], created: ISODate("2026-01-01T00:00:00Z")}
+  {_id: "e2e-admin-cluster-a", version: 3, group: "admins@e2e.invalid", scope: "KubernetesCluster", subject: "11111111-1111-4111-8111-111111111111", access: ["kubernetes:admin"], created: ISODate("2026-01-01T00:00:00Z")},
+  {_id: "e2e-reader-cluster-a", version: 3, group: "readers@e2e.invalid", scope: "KubernetesCluster", subject: "11111111-1111-4111-8111-111111111111", access: ["ror:read", "kubernetes:logon"], created: ISODate("2026-01-01T00:00:00Z")},
+  {_id: "e2e-reader-cluster-b", version: 3, group: "readers@e2e.invalid", scope: "KubernetesCluster", subject: "22222222-2222-4222-8222-222222222222", access: ["kubernetes:logon"], created: ISODate("2026-01-01T00:00:00Z")}
 ]);
 const crypto = require("crypto");
 const clusters = [
@@ -51,4 +53,4 @@ target.apikeys.insertOne({
   hash: crypto.createHash("sha512").update(`${serviceIdentifier}-synthetic-onlysynthetic-only`).digest("hex"),
   expires: ISODate("2099-01-01T00:00:00Z"), created: ISODate("2026-01-01T00:00:00Z")
 });
-print("Seeded synthetic ACL and cluster-resource fixture v2");
+print("Seeded synthetic ACL and cluster-resource fixture v3");

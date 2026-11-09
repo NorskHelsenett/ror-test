@@ -20,7 +20,7 @@ for attempt in 1 2 3; do
   compose up -d --wait mongodb
   compose exec -T mongodb mongosh 'mongodb://test:synthetic-only@127.0.0.1:27017/admin' --quiet --eval '
     const target = db.getSiblingDB("nhn-ror");
-    if (target.acl.countDocuments({}) !== 4) throw new Error("expected four grants");
+    if (target.acl.countDocuments({}) !== 6) throw new Error("expected six grants");
     if (target.apikeys.countDocuments({type:"Cluster"}) !== 2) throw new Error("expected two cluster keys");
     if (target.apikeys.countDocuments({type:"Service"}) !== 1) throw new Error("expected one service key");
     if (target.resourcesv2.countDocuments({}) !== 6) throw new Error("expected six resources");

@@ -171,8 +171,8 @@ sets `IdentityTypeCluster` and `IdentityTypeService` respectively.
 
 | Identity | API group | Seeded permissions |
 |---|---|---|
-| `admin@e2e.invalid` | `admins@e2e.invalid` | Global `ror:read/create/update/delete` and `ror:config:read/write` grants |
-| `reader@e2e.invalid` | `readers@e2e.invalid` | Only `ror:read` on KubernetesCluster A |
+| `admin@e2e.invalid` | `admins@e2e.invalid` | Global `ror:read/create/update/delete` and `ror:config:read/write`; `kubernetes:admin` on migrated cluster A |
+| `reader@e2e.invalid` | `readers@e2e.invalid` | `ror:read` and `kubernetes:logon` on cluster A; `kubernetes:logon` on unmigrated cluster B |
 | `outsider@e2e.invalid` | `outsiders@e2e.invalid` | No fixture grant |
 | `grant-reader@e2e.invalid` | `admins@e2e.invalid` | Token claim permits only `ror:read` on KubernetesCluster A, overriding the group's broader grants |
 | `empty-grants@e2e.invalid` | `admins@e2e.invalid` | Explicit empty token grant claim denies access despite the group's broader grants |
@@ -197,6 +197,8 @@ Run `bash testenv/run.sh run` from this directory. The matrix is grouped by acti
 user/identity; the **# column is the execution order** in the JSON suite, not the
 display order below. Requests use the real API, MongoDB, Valkey, Vault, and RabbitMQ.
 The upstream OIDC provider is mocked; no production IdP or ror-auth broker is used.
+The `token-key-init` service generates a temporary signing key in the isolated
+Vault so the API can sign exchanged tokens; no signing key is committed.
 
 For rows 1-6, the lookup endpoint is
 `HEAD /v2/acl/lookup/KubernetesCluster/<subject>/<access>`.
@@ -227,13 +229,29 @@ Authenticated with `OUTSIDER_TOKEN`; no fixture grant.
 |---|---|---|---|
 | 6 | `outsider denied` | Outsider requests `ror:read` on A | HTTP **403** |
 
+#### Admin token exchange migration
+
+Cluster A has a direct `kubernetes:admin` ACL and is treated as migrated.
+Cluster B has no `kubernetes:admin` ACL and retains the legacy
+`kubernetes:logon` fallback. Successful exchanges capture the returned token at
+the response root; the harness aliases captured values so token contents are not
+written to reports and do not make repeat comparisons nondeterministic.
+
+| # | Scenario | How it is tested | Expected result |
+|---|---|---|---|
+| 47 | `reader normal exchange on migrated cluster` | Reader requests a regular token for A | HTTP **200** |
+| 48 | `reader admin exchange denied on migrated cluster` | Reader has `kubernetes:logon`, but requests an admin token for A | HTTP **403** |
+| 49 | `admin grant permits exchange on migrated cluster` | Admin requests an admin token for A with `kubernetes:admin` but no separate logon grant | HTTP **200** |
+| 50 | `reader admin exchange uses legacy logon on unmigrated cluster` | Reader requests an admin token for B, which has no admin ACL | HTTP **200** |
+| 51 | `outsider admin exchange denied on unmigrated cluster` | Outsider requests an admin token for B without logon access | HTTP **403** |
+
 #### Admin user (`admin@e2e.invalid`)
 
 Authenticated with `ADMIN_TOKEN`; global ACL data permits reads and updates across
 both cluster ownership boundaries. Existing ACL CRUD checks are supplemented by
 six resource PATCH/readback pairs. Resource updates run after B's unchanged-state
-assertions (steps 23-34), so they cannot invalidate the isolation checks; the
-identity steps (35-42) run last and mutate nothing.
+assertions (steps 23-34), so they cannot invalidate the isolation checks. Identity
+checks (35-42) and token exchange checks (47-51) do not mutate fixture resources.
 
 | # | Scenario | How it is tested | Expected result |
 |---|---|---|---|
@@ -324,7 +342,7 @@ the current API contract: the read-filtered lookup prevents PATCH from seeing
 B's object before it reaches the explicit write-permission check. It is not
 treated as interchangeable with **403** in the suite.
 
-The single-run pass condition is all **42/42** steps executed without failures
+The single-run pass condition is all **51/51** steps executed without failures
 and command exit code **0**. Any unexpected status, failed assertion, failed
 capture, or transport error makes the run fail. Execution stops at the first
 failed step, so later dependent steps are **not tested**, not implicitly passed.
@@ -342,8 +360,8 @@ ownership inheritance or clusters whose owner is a workspace/project.
 Every step declares a method, relative path, and expected HTTP status. Optional
 `equals` assertions use JSON pointers; the empty pointer selects the whole body.
 `capture` stores string response fields for subsequent `${VARIABLE}` references.
-Captured IDs are normalized to logical names for comparison. Bodies are expanded
-as structured JSON, not string-concatenated JSON. `ignore` and `unordered` apply
+Captured IDs and token strings are normalized to logical names for comparison.
+Bodies are expanded as structured JSON, not string-concatenated JSON. `ignore` and `unordered` apply
 only to explicitly listed JSON paths (`*` matches one segment). Do not normalize
 authorization fields or pagination order. Selected response headers can also be
 asserted. Steps stop on the first failure to avoid misleading dependent failures.
@@ -357,7 +375,7 @@ bash testenv/seed-test.sh
 ```
 
 This starts amd64 MongoDB and the actual seed container three times, with a new
-volume each time. Each run must exit successfully and contain exactly four ACL
+volume each time. Each run must exit successfully and contain exactly six ACL
 grants, two cluster API keys, one service API key, and six resources before normal
 API startup seeding. On an arm64 workstation it requires working amd64 emulation.
 
@@ -385,12 +403,15 @@ unit test run is not evidence that the real stack passed.
 | `TestCompare` | Compare manufactured reports with equal responses, changed statuses/digests/names, invalid schema/suite, empty/incomplete results, and failures | Equal complete passing reports have no differences; the invalid/regression examples produce differences, including two identically truncated reports |
 | `TestNormalizationIsExplicit` | Normalize JSON with declared timestamp ignores, array ordering, and generated-ID aliases; parse trailing JSON and an escaped pointer | Explicitly normalized documents match; without the declared ordering/ID normalization they differ; trailing JSON is rejected and `/a~1b/0` resolves correctly |
 | `TestCompareSameFile` | Invoke the comparison command with the same file as baseline and candidate, then increase its declared expected count | Complete report succeeds; truncated report returns an error |
+| `TestTokenExchangeMigrationScenarios` | Validate that the API scenario includes regular, migrated-admin, and legacy-fallback exchanges with the expected identities and outcomes | All five migration scenarios are present and well-formed |
 | `TestJUnitAndArtifactPermissions` | Write and parse JUnit for a deliberately failing result; inspect the output file's permissions | `tests=1`, `failures=1`, and file mode `0600` |
 
 Sources: [runner_test.go](internal/e2e/runner_test.go),
 [compare_test.go](internal/e2e/compare_test.go), and
-[main_test.go](cmd/e2e/main_test.go). With `-race`, any detected data race is also
-a failure. This does not run the containerized API under the Go race detector.
+[main_test.go](cmd/e2e/main_test.go), with migration scenario coverage in
+[token_exchange_test.go](internal/e2e/token_exchange_test.go). With `-race`, any
+detected data race is also a failure. This does not run the containerized API
+under the Go race detector.
 
 ## Run modes and expected outcomes
 
@@ -400,12 +421,12 @@ input; the containing test command still exits **0** when that rejection occurs.
 | Command | How it runs | Expected successful result |
 |---|---|---|
 | `go test -race ./internal/e2e ./cmd/e2e` | Local in-process tests above, no Docker stack | Both packages pass; exit **0** |
-| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 42/42 steps`; no result failures; exit **0** |
-| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **42/42**; `comparison: 0 differences`; exit **0** |
+| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 51/51 steps`; no result failures; exit **0** |
+| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **51/51**; `comparison: 0 differences`; exit **0** |
 | `bash testenv/run.sh compare <image>` | Run current source and the selected baseline image independently with identical fixtures | Both must satisfy the scenario assertions and have matching normalized responses; zero differences and exit **0** only if equivalent |
 | `bash testenv/snapshot-test.sh` | Validate merged Compose configuration and attempt a nonexistent snapshot | Configuration is valid; the nonexistent snapshot is rejected; overall exit **0** |
 | `bash testenv/snapshot-test.sh --restore` | Create a synthetic MongoDB archive, discard the source database, and restore into a fresh one | Exactly one `resourcesv2` document with `uid=snapshot-probe`; zero `apikeys` documents; identical archive SHA-256 before/after; exit **0** |
-| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **42/42**; zero differences; exit **0** |
+| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **51/51**; zero differences; exit **0** |
 
 The snapshot fixture deliberately includes an API-key record to prove that the
 restore excludes it. This is not a comprehensive sanitizer test, nor proof that
@@ -423,8 +444,8 @@ SLAs. Scenario duration is recorded but is not a pass/fail threshold.
 
 Assertions run on the original responses before normalization. For this ACL
 suite, only `/created` on create/read/update is ignored, and exact string values
-matching captured IDs are replaced by logical aliases. No unordered arrays are
-declared in this suite; access-array ordering therefore matters.
+matching captured IDs and exchanged tokens are replaced by logical aliases. No
+unordered arrays are declared in this suite; access-array ordering therefore matters.
 
 The comparator checks report schema, suite fingerprint, declared/completed step
 counts, named results, assertion failures, HTTP status, and the digest of each
@@ -445,14 +466,14 @@ After stack execution, inspect `artifacts/<run-id>/`:
 
 | Artifact | Expected content and interpretation |
 |---|---|
-| `candidate.json`, `baseline.json` | `expected: 42`, 42 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
-| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="42"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
+| `candidate.json`, `baseline.json` | `expected: 51`, 51 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
+| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="51"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
 | `diff.json` | No differences currently serializes as JSON `null`; a mismatch produces entries with `name` and `reason`, not raw response bodies |
 | `exit-code.txt` | `0` for a completed successful orchestration; nonzero for failure after the cleanup trap was installed |
 | `startup.log` | Local dependency/application diagnostics retained on failure; may contain sensitive information and is not uploaded by CI |
 | `*-image.txt`, `build.txt`, `fixtures.sha256`, optional `snapshot.sha256` | Image identity, Go build metadata, and input hashes for reproducing a run; not correctness assertions |
 
-The `42/42 steps` console line counts executed steps, not passing assertions:
+The `51/51 steps` console line counts executed steps, not passing assertions:
 the last step can fail after all steps have executed. Always check command exit
 status and report failures. Startup/configuration errors may occur before JSON
 or JUnit reports are written. Preflight/build errors can also occur before the
@@ -481,10 +502,12 @@ correctness remain untested by this suite.
 ## Verified locally
 
 - Harness tests, including race detection, passed.
-- All 42 user ACL, cluster isolation, admin resource-update, and identity (`/v2/self`) scenarios passed against current API.
-- Two fresh-data runs passed with zero comparison differences.
-- Two independent synthetic archive restores passed the same scenarios with
-  zero differences; excluded API keys were not restored and source bytes stayed
+- All 51 user ACL, cluster isolation, admin resource-update, identity (`/v2/self`),
+  and token exchange migration scenarios passed against the current API.
+- Two fresh-data runs passed all 51 scenarios with zero comparison differences.
+- Two independent synthetic archive restores passed the earlier scenario suite
+  with zero differences; the archive flow has not yet been rerun with the token
+  exchange additions. Excluded API keys were not restored and source bytes stayed
   unchanged.
 
 The suite exposed an API startup defect in the shared legacy RabbitMQ client:

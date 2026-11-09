@@ -73,6 +73,14 @@ services:
     command: [--fail, --silent, --show-error, --retry, "60", --retry-delay, "1", --retry-connrefused, --max-time, "5", http://oidc:8080/default/.well-known/openid-configuration]
     depends_on:
       oidc: {condition: service_started}
+  token-key-init:
+    image: ${E2E_RUNNER_IMAGE:?set E2E_RUNNER_IMAGE}
+    command: [seed-token-key]
+    environment:
+      VAULT_URL: http://vault:8200
+      VAULT_TOKEN: synthetic-only
+    depends_on:
+      vault-init: {condition: service_completed_successfully}
   api:
     image: ${E2E_API_IMAGE:?set E2E_API_IMAGE}
     platform: ${E2E_CANDIDATE_PLATFORM:-linux/amd64}
@@ -98,6 +106,7 @@ services:
       OIDC_SIGNER_ISSUER: http://oidc:8080/default
     depends_on:
       vault-init: {condition: service_completed_successfully}
+      token-key-init: {condition: service_completed_successfully}
       seed: {condition: service_completed_successfully}
       oidc-ready: {condition: service_completed_successfully}
   runner:

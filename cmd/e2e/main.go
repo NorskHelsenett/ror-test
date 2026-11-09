@@ -17,13 +17,16 @@ import (
 	"time"
 
 	"github.com/NorskHelsenett/ror-test/internal/e2e"
+	"github.com/NorskHelsenett/ror/pkg/clients/vaultclient"
+	"github.com/NorskHelsenett/ror/pkg/helpers/tokenstoragehelper"
+	"github.com/NorskHelsenett/ror/pkg/helpers/tokenstoragehelper/vaulttokenadapter"
 )
 
 func main() { os.Exit(execute()) }
 
 func execute() int {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: e2e run|compare|inspect-candidate|verify-report [flags]")
+		fmt.Fprintln(os.Stderr, "usage: e2e run|compare|inspect-candidate|verify-report|seed-token-key [flags]")
 		return 2
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -38,6 +41,8 @@ func execute() int {
 		err = inspectCandidate(os.Args[2:])
 	case "verify-report":
 		err = verifyReport(os.Args[2:])
+	case "seed-token-key":
+		err = seedTokenKey(ctx)
 	default:
 		err = fmt.Errorf("unknown command")
 	}
@@ -46,6 +51,34 @@ func execute() int {
 		return 1
 	}
 	return 0
+}
+
+func seedTokenKey(ctx context.Context) error {
+	const vaultURL = "http://vault:8200"
+	vaultToken := os.Getenv("VAULT_TOKEN")
+	if vaultToken == "" || os.Getenv("VAULT_URL") != vaultURL {
+		return fmt.Errorf("token-key seeding requires the isolated E2E Vault")
+	}
+
+	client, err := vaultclient.New(ctx, vaultclient.NewStaticVaultCredsHelper(vaultToken), vaultURL)
+	if err != nil {
+		return fmt.Errorf("connect to E2E Vault: %w", err)
+	}
+	key, err := tokenstoragehelper.GenerateKey()
+	if err != nil {
+		return fmt.Errorf("generate E2E signing key: %w", err)
+	}
+	storage := &tokenstoragehelper.KeyStorageProvider{
+		LastRotation:     time.Now(),
+		RotationInterval: 24 * time.Hour,
+		NumKeys:          1,
+		Keys:             map[int]tokenstoragehelper.Key{1: key},
+	}
+	adapter := vaulttokenadapter.NewVaultStorageAdapter(client, "secret/data/v1.0/ror/config/token")
+	if err := adapter.Set(storage); err != nil {
+		return fmt.Errorf("store E2E signing key in Vault: %w", err)
+	}
+	return nil
 }
 
 func run(ctx context.Context, args []string) error {
