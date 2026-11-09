@@ -245,13 +245,32 @@ written to reports and do not make repeat comparisons nondeterministic.
 | 50 | `reader admin exchange uses legacy logon on unmigrated cluster` | Reader requests an admin token for B, which has no admin ACL | HTTP **200** |
 | 51 | `outsider admin exchange denied on unmigrated cluster` | Outsider requests an admin token for B without logon access | HTTP **403** |
 
+#### Token exchange identity binding regressions
+
+The exchange must authorize the same credential it exchanges, rather than use
+a stored privileged bearer to elevate a different freshly authenticated user.
+Matching-credential controls remain in steps 47-51.
+
+| # | Scenario | Expected result |
+|---|---|---|
+| 52 | `stored admin cannot elevate fresh reader` | HTTP **403** |
+| 53 | `stored admin cannot elevate fresh outsider` | HTTP **403** |
+| 54 | `legacy logon cannot elevate another identity` | HTTP **403** |
+| 55 | `normal exchange rejects mixed identities` | HTTP **403** |
+| 56 | `cluster key cannot delegate user elevation` | HTTP **403** |
+| 57 | `body token alone cannot authorize exchange` | HTTP **401** |
+
+These are tests-first regressions, not a production fix. Against the unfixed
+API, steps 1-51 pass and step 52 returns **200** instead of **403**. The runner
+then stops, so steps 53-57 are not executed in that run.
+
 #### Admin user (`admin@e2e.invalid`)
 
 Authenticated with `ADMIN_TOKEN`; global ACL data permits reads and updates across
 both cluster ownership boundaries. Existing ACL CRUD checks are supplemented by
 six resource PATCH/readback pairs. Resource updates run after B's unchanged-state
 assertions (steps 23-34), so they cannot invalidate the isolation checks. Identity
-checks (35-42) and token exchange checks (47-51) do not mutate fixture resources.
+checks (35-42) and token exchange checks (47-57) do not mutate fixture resources.
 
 | # | Scenario | How it is tested | Expected result |
 |---|---|---|---|
@@ -342,7 +361,7 @@ the current API contract: the read-filtered lookup prevents PATCH from seeing
 B's object before it reaches the explicit write-permission check. It is not
 treated as interchangeable with **403** in the suite.
 
-The single-run pass condition is all **51/51** steps executed without failures
+The single-run pass condition is all **57/57** steps executed without failures
 and command exit code **0**. Any unexpected status, failed assertion, failed
 capture, or transport error makes the run fail. Execution stops at the first
 failed step, so later dependent steps are **not tested**, not implicitly passed.
@@ -404,12 +423,14 @@ unit test run is not evidence that the real stack passed.
 | `TestNormalizationIsExplicit` | Normalize JSON with declared timestamp ignores, array ordering, and generated-ID aliases; parse trailing JSON and an escaped pointer | Explicitly normalized documents match; without the declared ordering/ID normalization they differ; trailing JSON is rejected and `/a~1b/0` resolves correctly |
 | `TestCompareSameFile` | Invoke the comparison command with the same file as baseline and candidate, then increase its declared expected count | Complete report succeeds; truncated report returns an error |
 | `TestTokenExchangeMigrationScenarios` | Validate that the API scenario includes regular, migrated-admin, and legacy-fallback exchanges with the expected identities and outcomes | All five migration scenarios are present and well-formed |
+| `TestTokenExchangeIdentityBindingScenarios` | Validate mixed-identity, API-key, and unauthenticated exchange requests and their expected denials | All six identity-binding scenarios are present and well-formed |
 | `TestJUnitAndArtifactPermissions` | Write and parse JUnit for a deliberately failing result; inspect the output file's permissions | `tests=1`, `failures=1`, and file mode `0600` |
 
 Sources: [runner_test.go](internal/e2e/runner_test.go),
 [compare_test.go](internal/e2e/compare_test.go), and
 [main_test.go](cmd/e2e/main_test.go), with migration scenario coverage in
-[token_exchange_test.go](internal/e2e/token_exchange_test.go). With `-race`, any
+[token_exchange_test.go](internal/e2e/token_exchange_test.go) and
+[token_exchange_identity_test.go](internal/e2e/token_exchange_identity_test.go). With `-race`, any
 detected data race is also a failure. This does not run the containerized API
 under the Go race detector.
 
@@ -421,12 +442,12 @@ input; the containing test command still exits **0** when that rejection occurs.
 | Command | How it runs | Expected successful result |
 |---|---|---|
 | `go test -race ./internal/e2e ./cmd/e2e` | Local in-process tests above, no Docker stack | Both packages pass; exit **0** |
-| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 51/51 steps`; no result failures; exit **0** |
-| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **51/51**; `comparison: 0 differences`; exit **0** |
+| `bash testenv/run.sh run` | Build current source, seed fresh data, start dependencies, wait for API readiness, obtain mock-issued tokens, run all steps with user tokens or cluster API keys | `candidate: 57/57 steps`; no result failures; exit **0** |
+| `bash testenv/run.sh repeat` | Run the same current image twice, removing containers and volumes between runs | Candidate and baseline each pass **57/57**; `comparison: 0 differences`; exit **0** |
 | `bash testenv/run.sh compare <image>` | Run current source and the selected baseline image independently with identical fixtures | Both must satisfy the scenario assertions and have matching normalized responses; zero differences and exit **0** only if equivalent |
 | `bash testenv/snapshot-test.sh` | Validate merged Compose configuration and attempt a nonexistent snapshot | Configuration is valid; the nonexistent snapshot is rejected; overall exit **0** |
 | `bash testenv/snapshot-test.sh --restore` | Create a synthetic MongoDB archive, discard the source database, and restore into a fresh one | Exactly one `resourcesv2` document with `uid=snapshot-probe`; zero `apikeys` documents; identical archive SHA-256 before/after; exit **0** |
-| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **51/51**; zero differences; exit **0** |
+| `bash testenv/snapshot-test.sh --e2e` | Run the restore checks, then the full API suite twice using separate restores of the synthetic archive | Restore checks pass; both API runs pass **57/57**; zero differences; exit **0** |
 
 The snapshot fixture deliberately includes an API-key record to prove that the
 restore excludes it. This is not a comprehensive sanitizer test, nor proof that
@@ -466,14 +487,14 @@ After stack execution, inspect `artifacts/<run-id>/`:
 
 | Artifact | Expected content and interpretation |
 |---|---|
-| `candidate.json`, `baseline.json` | `expected: 51`, 51 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
-| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="51"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
+| `candidate.json`, `baseline.json` | `expected: 57`, 57 named `results`, and no nonempty `failures` arrays on success; includes status, normalized digest, and elapsed milliseconds |
+| `candidate.xml`, `baseline.xml` | On a full pass, JUnit has `tests="57"` and `failures="0"`; only executed steps are represented, so do not treat absent steps as passes |
 | `diff.json` | No differences currently serializes as JSON `null`; a mismatch produces entries with `name` and `reason`, not raw response bodies |
 | `exit-code.txt` | `0` for a completed successful orchestration; nonzero for failure after the cleanup trap was installed |
 | `startup.log` | Local dependency/application diagnostics retained on failure; may contain sensitive information and is not uploaded by CI |
 | `*-image.txt`, `build.txt`, `fixtures.sha256`, optional `snapshot.sha256` | Image identity, Go build metadata, and input hashes for reproducing a run; not correctness assertions |
 
-The `51/51 steps` console line counts executed steps, not passing assertions:
+The `57/57 steps` console line counts executed steps, not passing assertions:
 the last step can fail after all steps have executed. Always check command exit
 status and report failures. Startup/configuration errors may occur before JSON
 or JUnit reports are written. Preflight/build errors can also occur before the
